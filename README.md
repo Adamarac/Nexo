@@ -54,6 +54,23 @@ concentrada é a carteira e quais ativos ele divide com outro fundo, e exportar 
 - **Observabilidade.** Logs estruturados em português (Serilog), traces e métricas via OpenTelemetry,
   visíveis no Grafana e no Console.
 
+## Telas
+
+**Análise · Panorama dos fundos.** Quantos fundos têm carteira, onde está o dinheiro e quais ativos
+concentram mais valor, com busca dos fundos que têm cada ativo.
+
+![Tela de Análise mostrando o panorama dos fundos](docs/images/analise-panorama.png)
+
+**Análise · Comparar fundos.** Até quatro fundos na mesma data: medidas resumo, patrimônio em base 100,
+distribuição das variações mensais, alocação, sobreposição das carteiras e curvas de concentração.
+
+![Tela de Análise comparando três fundos](docs/images/analise-comparar.png)
+
+**Console · Ingestão.** Arquivos baixados da CVM, linhas lidas por mês, motivos de rejeição e detalhe de
+cada arquivo, com o botão de reprocessar.
+
+![Tela do Console mostrando a ingestão dos arquivos da CVM](docs/images/console-ingestao.png)
+
 ## Como funciona
 
 O watcher baixa os zips da CVM para um volume compartilhado e registra cada arquivo no banco junto com um
@@ -205,6 +222,7 @@ Nexo/
     developer_console/        # tela do Console (com DESIGN.md)
     tests/                    # testes pytest
   tests/                      # unidade, integração e amostras reais da CVM
+  docs/images/                # capturas das telas usadas neste README
   infrastructure/docker/      # Dockerfiles e script de criação do banco
   scripts/                    # utilitários (testes em container, download de amostras)
   docker-compose.yml          # ambiente completo
