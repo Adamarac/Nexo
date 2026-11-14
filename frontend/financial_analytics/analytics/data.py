@@ -108,3 +108,17 @@ def all_positions(portfolio_id: int) -> list[dict]:
 
 def all_holders(asset_id: int, reference_date) -> list[dict]:
     return all_rows("asset_holders", ANALYSIS_LIMIT, asset_id, reference_date=reference_date)
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
+def issuers(search=None, min_spellings=None, sort=None, page=1, page_size=50) -> dict:
+    return _call("search_issuers", search=search, min_spellings=min_spellings, sort=sort, page=page, page_size=page_size)
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
+def issuer(document: str) -> dict | None:
+    return _call("issuer", document)
+
+
+def all_issuer_funds(document: str, spelling=None) -> list[dict]:
+    return all_rows("issuer_funds", ANALYSIS_LIMIT, document, spelling=spelling)

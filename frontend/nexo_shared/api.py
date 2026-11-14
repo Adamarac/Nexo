@@ -79,6 +79,17 @@ class NexoApi:
     def concentration(self, *, reference_date=None, top=20) -> dict:
         return self._get("/analytics/concentration", referenceDate=reference_date, top=top)
 
+    # ---- Emissores ----
+
+    def search_issuers(self, *, search=None, min_spellings=None, sort=None, page=1, page_size=20) -> dict:
+        return self._get("/issuers", search=search, minSpellings=min_spellings, sort=sort, page=page, pageSize=page_size)
+
+    def issuer(self, document: str) -> dict | None:
+        return self._get_or_none(f"/issuers/{document}")
+
+    def issuer_funds(self, document: str, *, spelling=None, page=1, page_size=20) -> dict:
+        return self._get(f"/issuers/{document}/funds", spelling=spelling, page=page, pageSize=page_size)
+
     # ---- Ingestão ----
 
     def ingestion_status(self) -> dict:
