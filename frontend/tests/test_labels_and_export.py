@@ -37,6 +37,15 @@ def test_excel_keeps_numbers_as_numbers():
     assert sheet["A2"].value == 1234.5
 
 
+def test_excel_drops_control_characters_that_come_in_cvm_names():
+    # A CVM às vezes manda nomes com caracteres de controle, que o Excel não aceita.
+    name = "EMIVE PARTICIPA" + chr(3) + chr(19) + "ES S.A."
+    content = export.to_excel(pd.DataFrame({"Emissor": [name], "Fundos": [2]}))
+    sheet = load_workbook(io.BytesIO(content))["Nexo"]
+    assert sheet["A2"].value == "EMIVE PARTICIPAES S.A."
+    assert sheet["B2"].value == 2
+
+
 def test_asset_label_treats_nan_as_missing():
     nan = float("nan")
     assert labels.asset(nan, "LETRAS FINANCEIRAS DO TESOURO", "2027-09-01") == "LETRAS FINANCEIRAS DO TESOURO (venc. 01/09/2027)"
