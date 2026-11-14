@@ -77,6 +77,12 @@ namespace Nexo.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("maturity_date");
 
+                    b.Property<string>("MaturityGroup")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("text")
+                        .HasColumnName("maturity_group")
+                        .HasComputedColumnSql("CASE\n    WHEN maturity_date IS NULL OR ticker IS NOT NULL OR block NOT IN (0, 1, 5, 6) THEN NULL\n    WHEN block = 1 THEN 'bond|' || coalesce(description, '')\n    WHEN issuer_document IS NOT NULL THEN 'issuer|' || coalesce(application_type, '') || '|' || coalesce(asset_type, '') || '|' || issuer_document\n    ELSE 'name|' || coalesce(application_type, '') || '|' || coalesce(description, '')\nEND", true);
+
                     b.Property<string>("Ticker")
                         .HasColumnType("text")
                         .HasColumnName("ticker");
@@ -96,6 +102,9 @@ namespace Nexo.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Isin")
                         .HasDatabaseName("ix_assets_isin");
+
+                    b.HasIndex("MaturityGroup")
+                        .HasDatabaseName("ix_assets_maturity_group");
 
                     b.HasIndex("Ticker")
                         .HasDatabaseName("ix_assets_ticker");

@@ -35,4 +35,7 @@ public sealed class Asset
 
     // Preenchido quando o ativo é cota de outro fundo, guardando só o CNPJ.
     public string? InvestedFundDocument { get; private set; }
+
+    // Junta os vencimentos de um mesmo título; vazio quando o ativo não tem vencimento. Calculada pelo banco.
+    public string? MaturityGroup { get; private set; }
 }
