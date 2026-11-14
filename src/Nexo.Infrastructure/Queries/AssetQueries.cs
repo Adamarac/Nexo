@@ -149,6 +149,17 @@ internal sealed class AssetQueries(NexoDbContext db) : IAssetQueries
         LIMIT @take OFFSET @skip
         """;
 
+    // Mesmos critérios da concentração: só carteiras atuais e posições que não estão em sigilo.
+    private const string MaturityHoldingsSql = """
+        SELECT p.asset_id, count(DISTINCT p.portfolio_id)::int AS funds, coalesce(sum(p.market_value), 0) AS total
+        FROM positions p
+        JOIN portfolios pf ON pf.id = p.portfolio_id AND pf.is_current
+        WHERE p.reference_date = @referenceDate
+          AND NOT p.is_confidential
+          AND p.asset_id = ANY(@assetIds)
+        GROUP BY p.asset_id
+        """;
+
     // Igual à concentração por ativo, mas somando todos os vencimentos de um mesmo título.
     private const string GroupedConcentrationSql = """
         SELECT min(a.id) AS asset_id,
@@ -227,7 +238,20 @@ internal sealed class AssetQueries(NexoDbContext db) : IAssetQueries
 
         var issuerNames = await db.MostUsedAsync([asset.IssuerDocument], cancellationToken);
         var name = GroupName(asset.MaturityGroup, asset.Description, asset.AssetType, asset.IssuerDocument, asset.IssuerName, issuerNames);
-        return new AssetGroupDetail(asset.Id, name, members.Select(ToView).ToList());
+        var referenceDate = await db.Portfolios
+            .Where(portfolio => portfolio.IsCurrent)
+            .MaxAsync(portfolio => (DateOnly?)portfolio.ReferenceDate, cancellationToken);
+        var holdings = referenceDate is null ? [] : await db.ReadAsync(
+            MaturityHoldingsSql,
+            command =>
+            {
+                command.Add("referenceDate", referenceDate.Value);
+                command.Add("assetIds", members.Select(member => member.Id).ToArray());
+            },
+            reader => new MaturityHolding(reader.GetInt64(0), reader.GetInt32(1), reader.GetDecimal(2)),
+            cancellationToken);
+
+        return new AssetGroupDetail(asset.Id, name, members.Select(ToView).ToList(), referenceDate, holdings);
     }
 
     private async Task<List<ConcentrationItem>> GetGroupedConcentrationAsync(
