@@ -52,6 +52,7 @@ public static class ApiSetup
         app.MapFundEndpoints()
             .MapPortfolioEndpoints()
             .MapAssetEndpoints()
+            .MapIssuerEndpoints()
             .MapAnalyticsEndpoints()
             .MapIngestionEndpoints();
 

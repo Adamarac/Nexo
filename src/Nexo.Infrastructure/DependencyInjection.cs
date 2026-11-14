@@ -10,6 +10,7 @@ using Nexo.Application.Queries.Assets;
 using Nexo.Application.Queries.Dashboard;
 using Nexo.Application.Queries.Funds;
 using Nexo.Application.Queries.Ingestion;
+using Nexo.Application.Queries.Issuers;
 using Nexo.Application.Queries.Portfolios;
 using Nexo.Infrastructure.Caching;
 using Nexo.Infrastructure.Cvm;
@@ -81,6 +82,7 @@ public static class DependencyInjection
         services.AddScoped<IFundQueries, FundQueries>();
         services.AddScoped<IPortfolioQueries, PortfolioQueries>();
         services.AddScoped<IAssetQueries, AssetQueries>();
+        services.AddScoped<IIssuerQueries, IssuerQueries>();
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IIngestionQueries, IngestionQueries>();
         services.AddSingleton<IQueryCache, RedisQueryCache>();
