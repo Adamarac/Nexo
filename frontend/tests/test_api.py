@@ -78,3 +78,30 @@ def test_iterate_walks_pages_until_the_limit():
     rows = list(api.iterate(api.search_funds, max_items=150))
     assert len(rows) == 150
     assert rows[-1]["id"] == 149
+
+
+def test_issuer_endpoints_send_the_expected_paths_and_filters():
+    seen = []
+
+    def handler(request: httpx.Request):
+        seen.append(request.url)
+        if request.url.path.endswith("/61186680000174"):
+            return httpx.Response(200, json={"document": "61186680000174"})
+        return httpx.Response(200, json={"items": [], "page": 1, "pageSize": 20, "totalItems": 0})
+
+    api = client(handler)
+    api.search_issuers(search="bmg", min_spellings=2, sort="funds")
+    assert api.issuer("61186680000174") == {"document": "61186680000174"}
+    api.issuer_funds("61186680000174", spelling="BCO BMG SA", page=2)
+
+    assert [url.path for url in seen] == [
+        "/api/v1/issuers",
+        "/api/v1/issuers/61186680000174",
+        "/api/v1/issuers/61186680000174/funds",
+    ]
+    assert dict(seen[0].params) == {"search": "bmg", "minSpellings": "2", "sort": "funds", "page": "1", "pageSize": "20"}
+    assert dict(seen[2].params) == {"spelling": "BCO BMG SA", "page": "2", "pageSize": "20"}
+
+
+def test_unknown_issuer_becomes_none():
+    assert client(lambda request: httpx.Response(404)).issuer("11111111000111") is None
