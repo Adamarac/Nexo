@@ -1,0 +1,12 @@
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+data/
+*.log
