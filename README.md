@@ -43,11 +43,14 @@ concentrada é a carteira e quais ativos ele divide com outro fundo, e exportar 
   nova revisão, detectada por uma impressão digital (SHA-256) das linhas de cada fundo.
 - **Linhas rejeitadas com motivo.** CNPJ inválido, data de outro mês, linha repetida e outros problemas
   ficam guardados com a linha original, para conferência.
-- **API REST de consulta.** Fundos, carteiras, posições, ativos, detentores de um ativo, concentração do
-  mercado, situação da ingestão e reprocessamento de arquivo, com OpenAPI e cache no Redis.
+- **API REST de consulta.** Fundos, carteiras, posições, ativos, detentores de um ativo, emissores,
+  concentração do mercado, situação da ingestão e reprocessamento de arquivo, com OpenAPI e cache no Redis.
+- **Emissores pelo CNPJ.** Cada fundo escreve o nome do emissor de um jeito ("BANCO BMG SA", "BCO BMG SA",
+  "BMG"...). A carga guarda, mês a mês, como cada fundo escreveu o nome, e o CNPJ junta todas as formas.
 - **Análise (Streamlit).** Panorama do mercado, busca de fundos, análise de um fundo com medidas resumo e
   concentração, comparação de até quatro fundos (inclusive sobreposição das carteiras) e detentores de
-  cada ativo; toda tabela filtrada exporta para CSV ou Excel.
+  cada ativo, além dos emissores com as formas de escrever o nome e quais fundos usam cada uma; toda tabela
+  filtrada exporta para CSV ou Excel.
 - **Console (Streamlit).** Saúde dos serviços, arquivos e linhas rejeitadas, workers e tempo de
   processamento, filas do RabbitMQ, CPU e memória, tamanho do banco e busca nos logs; permite pedir o
   reprocessamento de um arquivo.

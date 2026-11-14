@@ -105,6 +105,7 @@ flowchart LR
 | `assets` | Um registro por ativo, pela chave de identidade de cada bloco |
 | `portfolios` | Carteira de um fundo numa data, com revisão e marca de atual |
 | `positions` | Linhas da carteira, **uma partição por mês** (`positions_202609`) |
+| `issuer_spellings` | Como cada fundo escreveu o nome de cada emissor (pelo CNPJ) em cada mês |
 | `dataset_files` | Cada versão baixada de cada arquivo, com status, contagens e erro |
 | `rejected_rows` | Linhas rejeitadas, com motivo e texto original |
 | `outbox_messages` | Avisos esperando envio ao RabbitMQ |
@@ -122,6 +123,8 @@ pela carga, que grava carteira, ativo e posição na mesma transação.
 3. Um worker pega o aviso, assume o arquivo por um prazo (lease) e lê o zip linha a linha.
 4. Linhas válidas vão por `COPY` para tabelas temporárias; inválidas vão para `rejected_rows` com motivo.
 5. Numa transação: carteiras novas ou alteradas ganham revisão, ativos novos entram, posições vão para a partição do mês.
+   Na mesma transação, o mês de cada fundo do arquivo regrava em `issuer_spellings` os nomes de emissor que
+   ele usou, mesmo quando a carteira não mudou: reprocessar um mês antigo preenche essa tabela.
 6. O arquivo fica como processado, a época do cache sobe e a mensagem é confirmada.
 7. Erro gera nova tentativa (1, 5 e 25 minutos) e, na quarta falha, DLQ. Desligar o worker libera o arquivo na hora.
 
@@ -152,11 +155,15 @@ carteira do fundo 0,17 s e 0,01 s; demais consultas entre 0,04 e 0,25 s. O worke
 | Item | Estado |
 |---|---|
 | Ingestão, API, cache, Console e Análise em Streamlit, Docker Compose, CI | Pronto |
-| Testes | 104 de unidade, 47 de integração (Testcontainers), 55 das telas em Python (pytest); todos passam |
+| Testes | 104 de unidade, 59 de integração (Testcontainers), 58 das telas em Python (pytest); todos passam |
 | Carga real | 46 meses e cadastro: 38 milhões de posições, 46 partições, 11 GB |
+| Emissores | 7.527 CNPJs; 2.936 (39%) escritos de mais de um jeito; 1,9 milhão de linhas em `issuer_spellings` (541 MB) |
 
 **Achados na fonte:** o cadastro tem 18 linhas repetidas e um CNPJ inválido (`22222222222210`), todos
 rejeitados com motivo; o mesmo CNPJ aparece em registros antigos e cancelados, e vale o mais recente.
+Nas carteiras, o mesmo emissor aparece escrito de vários jeitos conforme o fundo (o CNPJ do BMG tem mais
+de seis formas, como "BANCO BMG S.A", "BCO BMG SA" e "BCOBMGSA"); por isso o emissor é identificado pelo
+CNPJ. Alguns nomes vêm com caracteres de controle, que a exportação para Excel remove.
 
 **Notas do ambiente:** com o Smart App Control do Windows ligado, build e testes do .NET rodam em container
 (`scripts/dotnet-container.sh`); as telas em Python também rodam em container, porque a máquina não tem Python.
@@ -165,7 +172,7 @@ Usamos FluentAssertions 7 (a última gratuita).
 **Limitações conhecidas:**
 
 - Fundos que somem de uma republicação continuam com a carteira da versão anterior.
-- Concentração e dashboard levam alguns segundos na primeira chamada após cada ingestão.
+- Concentração, dashboard e a lista de emissores levam de 1 a 3 s na primeira chamada após cada ingestão.
 - Coluna desconhecida no CSV é ignorada sem aviso; só a falta de coluna obrigatória falha o arquivo.
 - Detentores de um ativo sem data levam de 6 a 11 s na primeira chamada (a API procura o último mês em
   todas as partições); com a data, 0,08 s. A Análise pede primeiro o mês mais recente para evitar isso.
