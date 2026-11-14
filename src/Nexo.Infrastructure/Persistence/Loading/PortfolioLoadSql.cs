@@ -202,5 +202,23 @@ internal static class PortfolioLoadSql
         LEFT JOIN assets a ON a.identity_key = s.asset_identity_key;
         """;
 
+    // Como cada fundo escreveu o nome de cada emissor no mês. Vale para todos os fundos do arquivo,
+    // mesmo os que não mudaram: assim reprocessar um mês antigo também preenche esta tabela.
+    public const string RecordIssuerSpellings = """
+        DELETE FROM issuer_spellings s
+        USING stage_reporters r
+        WHERE s.fund_id = r.fund_id
+          AND s.fund_class_id IS NOT DISTINCT FROM r.fund_class_id
+          AND s.reference_date = r.reference_date;
+
+        INSERT INTO issuer_spellings (issuer_document, issuer_name, fund_id, fund_class_id, reference_date)
+        SELECT DISTINCT lpad(s.asset_issuer_document, 14, '0'), s.asset_issuer_name, r.fund_id, r.fund_class_id, s.reference_date
+        FROM stage_positions s
+        JOIN stage_reporters r ON r.fund_cnpj = s.fund_cnpj AND r.reference_date = s.reference_date
+        WHERE s.asset_issuer_document ~ '^[0-9]{12,14}$'
+          AND s.asset_issuer_name IS NOT NULL
+          AND s.asset_invested_fund_document IS NULL;
+        """;
+
     public const string CountChangedReporters = "SELECT count(*)::int FROM stage_reporters WHERE changed;";
 }

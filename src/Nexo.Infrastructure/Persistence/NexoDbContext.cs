@@ -15,6 +15,8 @@ public sealed class NexoDbContext(DbContextOptions<NexoDbContext> options) : DbC
 
     public DbSet<Asset> Assets => Set<Asset>();
 
+    public DbSet<IssuerSpelling> IssuerSpellings => Set<IssuerSpelling>();
+
     public DbSet<Portfolio> Portfolios => Set<Portfolio>();
 
     public DbSet<Position> Positions => Set<Position>();

@@ -103,6 +103,63 @@ namespace Nexo.Infrastructure.Persistence.Migrations
                     b.ToTable("assets", (string)null);
                 });
 
+            modelBuilder.Entity("Nexo.Domain.Assets.IssuerSpelling", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long?>("FundClassId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fund_class_id");
+
+                    b.Property<long>("FundId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fund_id");
+
+                    b.Property<string>("IssuerDocument")
+                        .IsRequired()
+                        .HasMaxLength(14)
+                        .HasColumnType("character(14)")
+                        .HasColumnName("issuer_document")
+                        .IsFixedLength();
+
+                    b.Property<string>("IssuerName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("issuer_name");
+
+                    b.Property<DateOnly>("ReferenceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("reference_date");
+
+                    b.HasKey("Id")
+                        .HasName("pk_issuer_spellings");
+
+                    b.HasIndex("FundClassId")
+                        .HasDatabaseName("ix_issuer_spellings_fund_class_id");
+
+                    b.HasIndex("IssuerName")
+                        .HasDatabaseName("ix_issuer_spellings_issuer_name");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("IssuerName"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("IssuerName"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("FundId", "ReferenceDate")
+                        .HasDatabaseName("ix_issuer_spellings_fund_id_reference_date");
+
+                    b.HasIndex("IssuerDocument", "FundId", "FundClassId", "ReferenceDate", "IssuerName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_issuer_spellings_issuer_document_fund_id_fund_class_id_refe");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("IssuerDocument", "FundId", "FundClassId", "ReferenceDate", "IssuerName"), false);
+
+                    b.ToTable("issuer_spellings", (string)null);
+                });
+
             modelBuilder.Entity("Nexo.Domain.Funds.Fund", b =>
                 {
                     b.Property<long>("Id")
@@ -632,6 +689,21 @@ namespace Nexo.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_outbox_messages_message_id");
 
                     b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Nexo.Domain.Assets.IssuerSpelling", b =>
+                {
+                    b.HasOne("Nexo.Domain.Funds.FundClass", null)
+                        .WithMany()
+                        .HasForeignKey("FundClassId")
+                        .HasConstraintName("fk_issuer_spellings_fund_classes_fund_class_id");
+
+                    b.HasOne("Nexo.Domain.Funds.Fund", null)
+                        .WithMany()
+                        .HasForeignKey("FundId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_issuer_spellings_funds_fund_id");
                 });
 
             modelBuilder.Entity("Nexo.Domain.Funds.FundClass", b =>
