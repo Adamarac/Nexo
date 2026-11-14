@@ -1,6 +1,7 @@
 namespace Nexo.Application.Queries.Assets;
 
-public sealed record ConcentrationSearch(DateOnly? ReferenceDate = null, int Top = 20)
+// Grouped junta os vencimentos de um mesmo título numa linha só.
+public sealed record ConcentrationSearch(DateOnly? ReferenceDate = null, int Top = 20, bool Grouped = false)
 {
     public const int MaxTop = 100;
 }

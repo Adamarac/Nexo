@@ -26,7 +26,7 @@ public static class AnalyticsEndpoints
     private static async Task<Ok<ConcentrationReport>> GetConcentrationAsync(
         [AsParameters] ConcentrationSearch search, IAssetQueries queries, IQueryCache cache, CancellationToken cancellationToken) =>
         TypedResults.Ok(await cache.GetOrCreateAsync(
-            "concentration", new { search.ReferenceDate, search.Top }, token => queries.GetConcentrationAsync(search, token), cancellationToken));
+            "concentration", new { search.ReferenceDate, search.Top, search.Grouped }, token => queries.GetConcentrationAsync(search, token), cancellationToken));
 
     private static async Task<Ok<DashboardSummary>> GetDashboardAsync(
         IDashboardQueries queries, IQueryCache cache, CancellationToken cancellationToken) =>

@@ -8,5 +8,9 @@ public interface IAssetQueries
 
     Task<PagedResult<AssetHolder>> GetHoldersAsync(long assetId, HolderSearch search, CancellationToken cancellationToken);
 
+    Task<PagedResult<AssetGroup>> SearchGroupsAsync(AssetSearch search, CancellationToken cancellationToken);
+
+    Task<AssetGroupDetail?> GetMaturitiesAsync(long assetId, CancellationToken cancellationToken);
+
     Task<ConcentrationReport> GetConcentrationAsync(ConcentrationSearch search, CancellationToken cancellationToken);
 }
