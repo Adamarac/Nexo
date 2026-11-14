@@ -112,11 +112,117 @@ flowchart LR
 
 ### Carga rápida e segura
 
-As posições ficam numa tabela particionada por mês de referência e sem chaves estrangeiras linha a linha:
-medimos que as chaves estrangeiras custavam cerca de 80% do tempo da carga. A consistência vem do próprio
-processo de carga, que resolve fundos e ativos antes de inserir as posições, numa transação protegida por
-uma trava por arquivo. Com três workers, os 46 meses disponíveis (cerca de 38 milhões de posições e 11 GB)
-carregam em uns 22 minutos, sem nenhuma nova tentativa.
+As posições ficam numa tabela particionada por mês de referência. Durante a gravação não há conferência
+linha a linha: medimos que as chaves estrangeiras conferidas a cada linha custavam cerca de 80% do tempo da
+carga. A consistência vem do próprio processo, que resolve fundos e ativos antes de inserir as posições, numa
+transação protegida por uma trava por arquivo. Logo depois da gravação, o mês ganha as chaves estrangeiras
+para a carteira e para o ativo, conferidas de uma vez só (um mês de 535 mil posições leva menos de 1 s); a
+partir daí o próprio banco recusa qualquer posição sem carteira ou com ativo inexistente. Com três workers, os
+46 meses disponíveis (cerca de 38 milhões de posições e 11 GB) carregam em uns 22 minutos.
+
+### Banco de dados
+
+Cadastro e ativos são as dimensões, `portfolios` é o cabeçalho de cada carteira e `positions` é a tabela de
+fatos, com uma partição por mês. Todas as ligações abaixo são chaves estrangeiras no PostgreSQL; nas posições,
+elas existem em cada partição mensal.
+
+```mermaid
+erDiagram
+    funds ||--o{ fund_classes : "tem"
+    funds ||--o{ portfolios : "informa"
+    fund_classes |o--o{ portfolios : "informa"
+    dataset_files ||--o{ portfolios : "trouxe a revisão"
+    portfolios ||--o{ positions : "contém"
+    assets |o--o{ positions : "é o ativo de"
+    dataset_files ||--o{ rejected_rows : "recusou"
+    funds ||--o{ issuer_spellings : "escreveu"
+    fund_classes |o--o{ issuer_spellings : "escreveu"
+
+    funds {
+        bigint id PK
+        char cnpj UK
+        text name
+        text fund_type
+        text situation
+        numeric net_worth "PL do cadastro"
+        boolean is_placeholder "carteira chegou antes do cadastro"
+    }
+    fund_classes {
+        bigint id PK
+        bigint fund_id FK
+        char cnpj UK
+        text name
+        text class_type
+    }
+    portfolios {
+        bigint id PK
+        bigint fund_id FK
+        bigint fund_class_id FK
+        date reference_date
+        int revision
+        boolean is_current "revisão que vale"
+        numeric net_worth
+        char fingerprint "SHA-256 das linhas"
+        bigint dataset_file_id FK
+    }
+    positions {
+        bigint id PK
+        date reference_date PK "partição do mês"
+        bigint portfolio_id FK
+        bigint asset_id FK "vazio quando em sigilo"
+        boolean is_confidential
+        text application_type
+        numeric quantity
+        numeric market_value
+        numeric share_of_net_worth
+        jsonb details
+    }
+    assets {
+        bigint id PK
+        text identity_key UK
+        smallint block "grupo da CVM"
+        text isin
+        text ticker
+        text description
+        text issuer_document "CNPJ do emissor"
+        date maturity_date
+        text maturity_group "junta os vencimentos"
+    }
+    issuer_spellings {
+        bigint id PK
+        char issuer_document "CNPJ do emissor"
+        text issuer_name "como o fundo escreveu"
+        bigint fund_id FK
+        bigint fund_class_id FK
+        date reference_date
+    }
+    dataset_files {
+        bigint id PK
+        text source_key "ex.: cda_fi_202609"
+        text status
+        char content_hash
+        int rows_read
+        int portfolios_changed
+        timestamptz discovered_at
+        timestamptz lease_until "prazo de posse do worker"
+    }
+    rejected_rows {
+        bigint id PK
+        bigint dataset_file_id FK
+        int line_number
+        text reason
+        text raw_line
+    }
+    outbox_messages {
+        bigint id PK
+        uuid message_id UK
+        text routing_key
+        jsonb payload
+        timestamptz sent_at "vazio até ir ao RabbitMQ"
+    }
+```
+
+### Camadas do código
 
 | Camada | Responsabilidade |
 |---|---|

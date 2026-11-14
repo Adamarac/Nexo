@@ -55,7 +55,7 @@ fundos estruturados (FIDC, FIAGRO, FIIM). São cerca de 800 mil linhas por mês.
 | Fundo e classe | Entidades separadas |
 | Leitura de CSV | Leitor próprio, em streaming, linha a linha |
 | Carga no banco | `COPY` para tabelas temporárias e SQL em conjunto numa transação |
-| Posições | Tabela particionada por mês, sem chave estrangeira linha a linha (ver seção 7) |
+| Posições | Tabela particionada por mês; chaves estrangeiras criadas em cada partição depois da carga e conferidas de uma vez (ver seção 7) |
 | Cache | Redis com "época" na chave; só nos endpoints que ganharam tempo medido |
 | Telas | Duas apps Streamlit + Plotly: Console (desenvolvedores) e Análise (analistas); só usam contratos existentes; cores validadas para daltonismo |
 | Escopo de dados | Todos os meses da pasta `DADOS/` e o cadastro; histórico 2005–2022 fora por enquanto |
@@ -111,8 +111,9 @@ flowchart LR
 | `outbox_messages` | Avisos esperando envio ao RabbitMQ |
 
 O desenho segue o modelo estrela: cadastro e ativos são as dimensões (com chave estrangeira), `portfolios`
-é o cabeçalho e `positions` é a tabela de fatos, gravada em lote. A integridade de `positions` é garantida
-pela carga, que grava carteira, ativo e posição na mesma transação.
+é o cabeçalho e `positions` é a tabela de fatos, gravada em lote. A carga grava carteira, ativo e posição na
+mesma transação; logo depois, a partição do mês ganha as chaves estrangeiras para `portfolios` e `assets`,
+conferidas de uma vez só (`ensure_positions_foreign_keys`). Assim o banco também recusa posição órfã.
 
 ---
 
@@ -145,6 +146,11 @@ Experimento isolado (711 mil posições): tabela comum com chave estrangeira 180
 estrangeira 132 s; particionada sem chave estrangeira 27 s. A conferência linha a linha travava a mesma
 carteira centenas de vezes.
 
+Chaves estrangeiras por partição, criadas depois da carga e conferidas de uma vez (VALIDATE): 1 s para um mês
+de 535 mil posições; a migração que conferiu os 46 meses (92 chaves, todas as posições do banco) levou ~50 s e
+não achou nenhuma posição órfã. Gravações seguintes no mesmo mês (republicações) são conferidas linha a linha,
+mas só trazem as carteiras que mudaram.
+
 Consultas (4 meses carregados): concentração 4,7 s sem cache e 0,01 s com cache; dashboard 1,5 s e 0,01 s;
 carteira do fundo 0,17 s e 0,01 s; demais consultas entre 0,04 e 0,25 s. O worker usa de 108 a 179 MB.
 
@@ -155,7 +161,7 @@ carteira do fundo 0,17 s e 0,01 s; demais consultas entre 0,04 e 0,25 s. O worke
 | Item | Estado |
 |---|---|
 | Ingestão, API, cache, Console e Análise em Streamlit, Docker Compose, CI | Pronto |
-| Testes | 106 de unidade, 67 de integração (Testcontainers), 60 das telas em Python (pytest); todos passam |
+| Testes | 106 de unidade, 70 de integração (Testcontainers), 62 das telas em Python (pytest); todos passam |
 | Carga real | 46 meses e cadastro: 38 milhões de posições, 46 partições, 11 GB |
 | Emissores | 7.527 CNPJs; 2.936 (39%) escritos de mais de um jeito; 1,9 milhão de linhas em `issuer_spellings` (541 MB) |
 
@@ -193,7 +199,6 @@ Usamos FluentAssertions 7 (a última gratuita).
 ## 9. Próximos passos possíveis
 
 - Conferência em conjunto, no fim da carga, de posições sem carteira ou sem ativo.
-- Chave estrangeira criada por partição depois da carga, validada numa passada só.
 - Bronze em MinIO, prata em Parquet e ouro em ClickHouse para análises de muitos anos.
 - Carga do histórico 2005–2022 (~100 milhões de posições).
 - Guardar o último mês de cada ativo em `assets` para os detentores responderem rápido sem data.
