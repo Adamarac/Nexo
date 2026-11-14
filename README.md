@@ -209,9 +209,11 @@ Nexo/
   scripts/                    # utilitários (testes em container, download de amostras)
   docker-compose.yml          # ambiente completo
   PLANO.md                    # decisões, medições e situação do projeto
+  LICENSE                     # licença MIT
 ```
 
 ## Licença
 
-Este repositório ainda não define uma licença. Até que um arquivo `LICENSE` seja adicionado, todos os
-direitos ficam reservados ao autor.
+Distribuído sob a licença MIT. Veja o arquivo [LICENSE](LICENSE).
+
+Os dados exibidos vêm do Portal de Dados Abertos da CVM e seguem as condições de uso da própria CVM.
