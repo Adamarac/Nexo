@@ -23,4 +23,7 @@ public interface IIngestionStore
 
     // Marca o arquivo como processado e as versões anteriores do mesmo arquivo como substituídas.
     Task CompleteAsync(DatasetFile file, CancellationToken cancellationToken);
+
+    // Há outra versão do mesmo arquivo baixada depois desta?
+    Task<bool> HasNewerVersionAsync(DatasetFile file, CancellationToken cancellationToken);
 }

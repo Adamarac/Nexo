@@ -13,6 +13,10 @@ public sealed class RequestReprocess(IIngestionStore store, TimeProvider clock)
         if (file is null)
             return ReprocessResult.NotFound;
 
+        // Reprocessar uma versão antiga trocaria os dados novos pelos velhos.
+        if (await store.HasNewerVersionAsync(file, cancellationToken))
+            return ReprocessResult.NotAllowed;
+
         if (!file.RequestReprocess(clock.GetUtcNow()))
             return ReprocessResult.NotAllowed;
 

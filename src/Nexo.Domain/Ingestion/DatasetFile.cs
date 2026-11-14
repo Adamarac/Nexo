@@ -124,9 +124,10 @@ public sealed class DatasetFile
         LeaseUntil = null;
     }
 
+    // Vale também para a versão que ainda espera na fila: ela não pode rodar depois da nova e desfazê-la.
     public void Supersede()
     {
-        if (Status == DatasetFileStatus.Processed)
+        if (Status is DatasetFileStatus.Processed or DatasetFileStatus.Downloaded or DatasetFileStatus.Failed)
             Status = DatasetFileStatus.Superseded;
     }
 

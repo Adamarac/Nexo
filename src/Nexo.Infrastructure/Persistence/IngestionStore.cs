@@ -56,13 +56,18 @@ internal sealed class IngestionStore(NexoDbContext db, OutboxWriter outbox) : II
         }
     }
 
+    public Task<bool> HasNewerVersionAsync(DatasetFile file, CancellationToken cancellationToken) =>
+        db.DatasetFiles.AnyAsync(
+            other => other.SourceKey == file.SourceKey && other.Id != file.Id && other.DiscoveredAt > file.DiscoveredAt,
+            cancellationToken);
+
     public async Task CompleteAsync(DatasetFile file, CancellationToken cancellationToken)
     {
         var olderVersions = await db.DatasetFiles
             .Where(other => other.SourceKey == file.SourceKey
                 && other.Id != file.Id
                 && other.DiscoveredAt <= file.DiscoveredAt
-                && other.Status == DatasetFileStatus.Processed)
+                && other.Status != DatasetFileStatus.Superseded)
             .ToListAsync(cancellationToken);
 
         foreach (var olderVersion in olderVersions)
