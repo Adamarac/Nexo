@@ -82,7 +82,8 @@ def _rows_per_file(files: data.Reading) -> None:
     if frame.empty:
         ui.empty("Nenhum arquivo ainda.")
         return
-    frame = frame.sort_values("sourceKey")
+    # Mês republicado tem duas versões com o mesmo nome; só a que vale entra no gráfico, senão a barra dobra.
+    frame = frame[frame["status"] != "Superseded"].sort_values("sourceKey")
     figure = go.Figure(
         go.Bar(
             x=frame["sourceKey"].map(ui.short_key),
