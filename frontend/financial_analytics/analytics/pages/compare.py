@@ -49,7 +49,7 @@ def render() -> None:
     with ui.card("allocation", "Alocação por tipo de aplicação", "% do patrimônio de cada fundo"):
         _allocation(funds, portfolios, names)
 
-    left, right = st.columns(2, gap="medium")
+    left, right = st.columns([2, 3], gap="medium")
     with left, ui.card("overlap", "Sobreposição das carteiras", "soma do menor peso de cada ativo em comum"):
         _overlap_matrix(funds, weights, names)
     with right, ui.card("shared", "Ativos em comum", "escolha o par de fundos"):
@@ -304,7 +304,6 @@ def _shared_assets(funds, weights, positions, names) -> None:
         width="stretch",
         height=min(40 + 35 * len(table), 330),
         column_config={
-            "Ativo": st.column_config.TextColumn(width="small"),
             first_name: ui.share_column(),
             second_name: ui.share_column(),
         },
