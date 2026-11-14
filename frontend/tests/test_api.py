@@ -105,3 +105,20 @@ def test_issuer_endpoints_send_the_expected_paths_and_filters():
 
 def test_unknown_issuer_becomes_none():
     assert client(lambda request: httpx.Response(404)).issuer("11111111000111") is None
+
+
+def test_asset_group_endpoints_send_the_expected_paths_and_filters():
+    seen = []
+
+    def handler(request: httpx.Request):
+        seen.append(request.url)
+        return httpx.Response(200, json={"items": [], "page": 1, "pageSize": 20, "totalItems": 0})
+
+    api = client(handler)
+    api.search_asset_groups(search="tesouro", block=1)
+    api.asset_maturities(42)
+    api.concentration(top=100, grouped=True)
+
+    assert [url.path for url in seen] == ["/api/v1/assets/groups", "/api/v1/assets/42/maturities", "/api/v1/analytics/concentration"]
+    assert dict(seen[0].params) == {"search": "tesouro", "block": "1", "page": "1", "pageSize": "20"}
+    assert dict(seen[2].params) == {"top": "100", "grouped": "true"}

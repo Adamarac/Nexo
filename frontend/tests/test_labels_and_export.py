@@ -50,3 +50,10 @@ def test_asset_label_treats_nan_as_missing():
     nan = float("nan")
     assert labels.asset(nan, "LETRAS FINANCEIRAS DO TESOURO", "2027-09-01") == "LETRAS FINANCEIRAS DO TESOURO (venc. 01/09/2027)"
     assert labels.asset(nan, nan, nan) == "Ativo sem descrição"
+
+
+def test_maturities_summarize_a_group_or_show_the_single_date():
+    assert labels.maturities(16, "2027-09-01", "2032-03-01") == "16 vencimentos, de set/2027 a mar/2032"
+    assert labels.maturities(1494, "2023-01-02", "2031-04-01") == "1.494 vencimentos, de jan/2023 a abr/2031"
+    assert labels.maturities(1, "2027-09-01", "2027-09-01") == "01/09/2027"
+    assert labels.maturities(1, None, None) == "sem vencimento"
