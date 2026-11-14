@@ -70,6 +70,33 @@ public sealed class PortfolioLoadTests(InfrastructureFixture infrastructure) : I
     }
 
     [Fact]
+    public async Task EachMonth_GetsForeignKeysCheckedOnceAfterTheLoad()
+    {
+        await LoadMonthAsync();
+
+        var keys = await _driver.QueryAsync(db => db.Database.SqlQueryRaw<string>("""
+            SELECT confrelid::regclass::text || CASE WHEN convalidated THEN ' conferida' ELSE ' pendente' END AS "Value"
+            FROM pg_constraint
+            WHERE conrelid = 'positions_202609'::regclass AND contype = 'f'
+            """).ToListAsync());
+
+        keys.Should().BeEquivalentTo(["portfolios conferida", "assets conferida"]);
+    }
+
+    [Fact]
+    public async Task PositionPointingToAMissingPortfolio_IsRefusedByTheDatabase()
+    {
+        await LoadMonthAsync();
+
+        var act = () => _driver.QueryAsync(db => db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO positions (reference_date, portfolio_id, is_confidential, application_type)
+            VALUES ('2026-09-30', -1, false, 'Teste')
+            """));
+
+        (await act.Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be("23503");
+    }
+
+    [Fact]
     public async Task ShareOfNetWorth_IsCalculatedFromThePortfolioNetWorth()
     {
         await LoadMonthAsync();
