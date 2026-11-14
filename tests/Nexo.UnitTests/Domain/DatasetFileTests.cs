@@ -127,6 +127,32 @@ public sealed class DatasetFileTests
     }
 
     [Fact]
+    public void Supersede_AlsoReachesAFileWaitingToBeReprocessed()
+    {
+        var file = NewFile();
+        file.StartProcessing(Now, Lease);
+        file.Complete(new IngestionCounts(1, 1, 0, 1), Now);
+        file.RequestReprocess(Now);
+
+        file.Supersede();
+
+        // Na fila ou não, a versão antiga não pode voltar a ser processada depois da nova.
+        file.Status.Should().Be(DatasetFileStatus.Superseded);
+        file.StartProcessing(Now, Lease).Should().Be(ProcessingStart.AlreadyProcessed);
+    }
+
+    [Fact]
+    public void Supersede_LeavesAFileBeingProcessedAlone()
+    {
+        var file = NewFile();
+        file.StartProcessing(Now, Lease);
+
+        file.Supersede();
+
+        file.Status.Should().Be(DatasetFileStatus.Processing);
+    }
+
+    [Fact]
     public void MatchesRemote_ComparesEtagAndSize()
     {
         var file = NewFile();

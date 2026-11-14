@@ -109,6 +109,36 @@ public sealed class PortfolioLoadTests(InfrastructureFixture infrastructure) : I
     }
 
     [Fact]
+    public async Task OlderVersionWaitingForReprocess_DoesNotReplaceTheNewerOne()
+    {
+        await LoadMonthAsync();
+        var original = await _driver.LatestFileAsync(FixtureArchives.Month);
+        await _driver.RequestReprocessAsync(original.Id);
+
+        // A CVM republica o mês enquanto a versão antiga ainda espera na fila; a nova é processada antes.
+        _cvm.Publish(FakeCvmServer.PortfoliosFolder, "cda_fi_202609.zip", RepublishedZip());
+        await _driver.CheckCvmAsync();
+        var republished = await _driver.LatestFileAsync(FixtureArchives.Month);
+        await _driver.ProcessAsync(Application.Ingestion.Messages.DatasetDownloaded.For(republished, "nova", DateTimeOffset.UtcNow));
+        var late = await _driver.ProcessAsync(Application.Ingestion.Messages.DatasetDownloaded.For(original, "antiga", DateTimeOffset.UtcNow));
+
+        late.Should().Be(ProcessingOutcome.AlreadyProcessed);
+        (await _driver.QueryAsync(db => db.DatasetFiles.SingleAsync(file => file.Id == original.Id))).Status.Should().Be(DatasetFileStatus.Superseded);
+        (await BorealItauValueAsync()).Should().Be(RepublishedValue);
+    }
+
+    [Fact]
+    public async Task ReprocessingAVersionThatAlreadyHasANewerOne_IsRefused()
+    {
+        await LoadMonthAsync();
+        var original = await _driver.LatestFileAsync(FixtureArchives.Month);
+        _cvm.Publish(FakeCvmServer.PortfoliosFolder, "cda_fi_202609.zip", RepublishedZip());
+        await _driver.CheckCvmAsync();
+
+        (await _driver.RequestReprocessAsync(original.Id)).Should().Be(ReprocessResult.NotAllowed);
+    }
+
+    [Fact]
     public async Task RepeatedMessage_IsIgnored()
     {
         await LoadMonthAsync();
@@ -177,6 +207,19 @@ public sealed class PortfolioLoadTests(InfrastructureFixture infrastructure) : I
         file.LastError.Should().Contain("VL_PATRIM_LIQ");
         (await _driver.QueryAsync(db => db.Portfolios.CountAsync())).Should().Be(0);
     }
+
+    private const decimal RepublishedValue = 9100000.00m;
+
+    private static byte[] RepublishedZip() =>
+        FixtureArchives.MonthZipWithReplacement("cda_fi_BLC_4_202609.csv", "186168.000000;9023562.96", "186168.000000;9100000.00");
+
+    private Task<decimal?> BorealItauValueAsync() =>
+        _driver.QueryAsync(db => db.Positions
+            .Where(position => position.Portfolio.IsCurrent
+                && position.Portfolio.Fund.Cnpj == Domain.Common.Cnpj.Parse(BorealCnpj)
+                && position.Asset!.Ticker == "ITUB3")
+            .Select(position => position.MarketValue)
+            .SingleAsync());
 
     private async Task LoadMonthAsync()
     {
