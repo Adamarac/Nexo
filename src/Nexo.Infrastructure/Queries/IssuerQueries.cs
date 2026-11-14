@@ -1,9 +1,6 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
 using Nexo.Application.Queries;
 using Nexo.Application.Queries.Issuers;
 using Nexo.Infrastructure.Persistence;
-using Npgsql;
 
 namespace Nexo.Infrastructure.Queries;
 
@@ -91,15 +88,15 @@ internal sealed class IssuerQueries(NexoDbContext db) : IIssuerQueries
         var sql = $"{SummariesSql}\nORDER BY {order}\nLIMIT @take OFFSET @skip";
 
         var total = 0;
-        var items = await ReadAsync(
+        var items = await db.ReadAsync(
             sql,
             command =>
             {
-                Add(command, "document", document);
-                Add(command, "pattern", pattern);
-                Add(command, "minSpellings", search.MinSpellings ?? 1);
-                Add(command, "take", search.PageSize);
-                Add(command, "skip", search.Skip);
+                command.Add("document", document);
+                command.Add("pattern", pattern);
+                command.Add("minSpellings", search.MinSpellings ?? 1);
+                command.Add("take", search.PageSize);
+                command.Add("skip", search.Skip);
             },
             reader =>
             {
@@ -115,9 +112,9 @@ internal sealed class IssuerQueries(NexoDbContext db) : IIssuerQueries
 
     public async Task<IssuerDetail?> GetAsync(string document, CancellationToken cancellationToken)
     {
-        var spellings = await ReadAsync(
+        var spellings = await db.ReadAsync(
             SpellingsSql,
-            command => Add(command, "document", document),
+            command => command.Add("document", document),
             reader => new IssuerSpellingView(
                 reader.GetString(0), reader.GetInt32(1), reader.GetFieldValue<DateOnly>(2), reader.GetFieldValue<DateOnly>(3)),
             cancellationToken);
@@ -125,9 +122,9 @@ internal sealed class IssuerQueries(NexoDbContext db) : IIssuerQueries
         if (spellings.Count == 0)
             return null;
 
-        var totals = await ReadAsync(
+        var totals = await db.ReadAsync(
             TotalsSql,
-            command => Add(command, "document", document),
+            command => command.Add("document", document),
             reader => (Funds: reader.GetInt32(0), First: reader.GetFieldValue<DateOnly>(1), Last: reader.GetFieldValue<DateOnly>(2)),
             cancellationToken);
 
@@ -137,14 +134,14 @@ internal sealed class IssuerQueries(NexoDbContext db) : IIssuerQueries
     public async Task<PagedResult<IssuerFund>> GetFundsAsync(string document, IssuerFundSearch search, CancellationToken cancellationToken)
     {
         var total = 0;
-        var items = await ReadAsync(
+        var items = await db.ReadAsync(
             FundsSql,
             command =>
             {
-                Add(command, "document", document);
-                Add(command, "spelling", string.IsNullOrWhiteSpace(search.Spelling) ? null : search.Spelling);
-                Add(command, "take", search.PageSize);
-                Add(command, "skip", search.Skip);
+                command.Add("document", document);
+                command.Add("spelling", string.IsNullOrWhiteSpace(search.Spelling) ? null : search.Spelling);
+                command.Add("take", search.PageSize);
+                command.Add("skip", search.Skip);
             },
             reader =>
             {
@@ -170,25 +167,4 @@ internal sealed class IssuerQueries(NexoDbContext db) : IIssuerQueries
 
         return looksLikeDocument && digits.Length >= MinimumDocumentDigits ? (digits, null) : (null, LikePattern.Contains(text));
     }
-
-    private async Task<List<T>> ReadAsync<T>(
-        string sql, Action<NpgsqlCommand> bind, Func<DbDataReader, T> read, CancellationToken cancellationToken)
-    {
-        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync(cancellationToken);
-
-        await using var command = new NpgsqlCommand(sql, connection);
-        bind(command);
-
-        var rows = new List<T>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            rows.Add(read(reader));
-
-        return rows;
-    }
-
-    private static void Add(NpgsqlCommand command, string name, object? value) =>
-        command.Parameters.AddWithValue(name, value ?? DBNull.Value);
 }
