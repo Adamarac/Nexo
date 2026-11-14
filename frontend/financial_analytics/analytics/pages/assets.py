@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from analytics import data, theme, ui
+from analytics import charts, data, theme, ui
 from nexo_shared import formatting, labels
 
 PAGE_SIZE = 50
@@ -161,48 +161,106 @@ def _results(search: str | None, block) -> None:
 
 
 def _group(group: dict) -> None:
-    assets = pd.DataFrame(group["assets"])
-    first = assets.iloc[0]
+    table = _upcoming_first(charts.maturity_table(group["assets"], group["holdings"]))
+    month = formatting.month(group["referenceDate"]) if group["referenceDate"] else "mês mais recente"
+    first = group["assets"][0]
     ui.page_header(group["name"] or "Título sem descrição", first["applicationType"] or "", ["Ativos", "Vencimentos"])
     if st.button("Voltar para a busca", icon=":material/arrow_back:"):
         st.query_params.pop("grupo", None)
         st.rerun()
 
+    held = table[table["value"].notna()]
     ui.kpis(
         [
-            ui.Kpi("Vencimentos", formatting.number(len(assets)), "já apareceram nas carteiras"),
-            ui.Kpi("Primeiro vencimento", formatting.day(assets["maturityDate"].min()), "o mais antigo"),
-            ui.Kpi("Último vencimento", formatting.day(assets["maturityDate"].max()), "o mais distante"),
+            ui.Kpi("Vencimentos", formatting.number(len(table)), "já apareceram nas carteiras"),
+            ui.Kpi(
+                f"Valor em {month}",
+                formatting.money_compact(held["value"].sum()) if not held.empty else "—",
+                f"em {formatting.number(len(held))} vencimentos que os fundos têm",
+            ),
+            ui.Kpi("Primeiro vencimento", formatting.day(table["maturity"].min()), "o mais antigo"),
+            ui.Kpi("Último vencimento", formatting.day(table["maturity"].max()), "o mais distante"),
         ]
     )
-    with ui.card("maturities", "Vencimentos", "selecione uma data para ver quem tem o ativo"):
-        dates = assets["maturityDate"].map(formatting.parse_date)
-        table = pd.DataFrame(
-            {
-                "id": assets["id"],
-                "Vencimento": dates,
-                "Situação": ["Vencido" if day and day < date.today() else "A vencer" for day in dates],
-                "ISIN": assets["isin"].fillna(formatting.MISSING),
-                "Tipo de ativo": assets["assetType"].fillna(formatting.MISSING),
-                "Emissor": assets["issuerName"].fillna(formatting.MISSING),
-            }
-        )
-        event = st.dataframe(
-            ui.tidy(table),
-            hide_index=True,
-            width="stretch",
-            height=min(40 + 35 * len(table), 560),
-            on_select="rerun",
-            selection_mode="single-row",
-            key=f"maturities-{group['assetId']}",
-            column_order=["Vencimento", "Situação", "ISIN", "Tipo de ativo", "Emissor"],
-            column_config={"Vencimento": st.column_config.DateColumn(format="DD/MM/YYYY")},
-        )
+    with ui.card("profile", "Quanto vence em cada mês", f"valor nas carteiras de {month}"):
+        _maturity_profile(table)
+    with ui.card("maturities", "Vencimentos", "os que ainda vão vencer primeiro; selecione uma data para ver quem tem"):
+        event = _maturity_table(group, table, month)
     if event.selection.rows:
         # Mantém o grupo no link para o "voltar" do detalhe trazer de volta a esta lista.
         st.query_params["ativo"] = str(int(table.iloc[event.selection.rows[0]]["id"]))
         st.session_state.pop(HOLDERS_PAGE, None)
         st.rerun()
+
+
+def _upcoming_first(table: pd.DataFrame) -> pd.DataFrame:
+    """Os que ainda vão vencer, do mais próximo ao mais distante; depois os vencidos, do mais recente ao mais antigo."""
+    today = date.today()
+    upcoming = table[table["maturity"].map(lambda day: day is not None and day >= today)].sort_values("maturity")
+    past = table.drop(upcoming.index).sort_values("maturity", ascending=False)
+    return pd.concat([upcoming, past]).reset_index(drop=True)
+
+
+def _maturity_profile(table: pd.DataFrame) -> None:
+    """Uma barra por mês de vencimento, somando o que os fundos têm no mês mais recente."""
+    months = charts.maturity_months(table)
+    if months.empty:
+        ui.empty("Nenhum fundo tem este título no mês mais recente: os vencimentos já passaram.")
+        return
+    divisor, unit = ui.money_scale(months["value"].max())
+    figure = go.Figure(
+        go.Bar(
+            x=[formatting.month(day) for day in months["month"]],
+            y=months["value"] / divisor,
+            marker_color=theme.ACCENT,
+            customdata=list(
+                zip(
+                    [formatting.month(day) for day in months["month"]],
+                    [formatting.money_compact(value) for value in months["value"]],
+                    [f"{count} {'vencimento' if count == 1 else 'vencimentos'}" for count in months["maturities"]],
+                    strict=True,
+                )
+            ),
+            hovertemplate="vence em %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]}<extra></extra>",
+        )
+    )
+    figure.update_yaxes(title_text=unit)
+    figure.update_xaxes(type="category", tickangle=0, nticks=12)
+    ui.chart(figure, 300)
+
+
+def _maturity_table(group: dict, table: pd.DataFrame, month: str):
+    # Texto alinhado à direita: assim o vencimento que nenhum fundo tem mostra "—" em vez de "None".
+    value_column = f"Valor em {month} (R$)"
+    shown = pd.DataFrame(
+        {
+            "id": table["id"],
+            "Vencimento": table["maturity"],
+            "Situação": ["Vencido" if day and day < date.today() else "A vencer" for day in table["maturity"]],
+            "Fundos que têm": [formatting.MISSING if pd.isna(funds) else formatting.number(funds) for funds in table["funds"]],
+            value_column: [formatting.MISSING if pd.isna(value) else formatting.number(value, 2) for value in table["value"]],
+            "ISIN": table["isin"].fillna(formatting.MISSING),
+            "Tipo de ativo": table["assetType"].fillna(formatting.MISSING),
+            "Emissor": table["issuerName"].fillna(formatting.MISSING),
+        }
+    )
+    return st.dataframe(
+        ui.tidy(shown),
+        hide_index=True,
+        width="stretch",
+        height=min(40 + 35 * len(shown), 560),
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"maturities-{group['assetId']}",
+        column_order=["Vencimento", "Situação", "Fundos que têm", value_column, "ISIN", "Tipo de ativo", "Emissor"],
+        column_config={
+            "Vencimento": st.column_config.DateColumn(format="DD/MM/YYYY"),
+            "Fundos que têm": st.column_config.TextColumn(
+                alignment="right", help="Fundos com este vencimento na carteira do mês; '—' quando nenhum tem"
+            ),
+            value_column: st.column_config.TextColumn(alignment="right"),
+        },
+    )
 
 
 def _detail(asset: dict) -> None:
