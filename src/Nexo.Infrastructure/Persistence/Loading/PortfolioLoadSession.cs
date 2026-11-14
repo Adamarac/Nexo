@@ -76,6 +76,8 @@ internal sealed class PortfolioLoadSession : IPortfolioLoadSession
         var changed = await _connection.ScalarAsync<int>(PortfolioLoadSql.CountChangedReporters, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
+
+        await _connection.ExecuteAsync(PortfolioLoadSql.EnsureMonthlyForeignKeys, cancellationToken);
         return changed;
     }
 

@@ -78,6 +78,13 @@ internal static class PortfolioLoadSql
         FROM (SELECT DISTINCT date_trunc('month', reference_date)::date AS month FROM stage_positions) AS months;
         """;
 
+    // Depois da transação: o mês ganha as chaves estrangeiras (se ainda não tem) e é conferido de uma vez.
+    // Fora da transação para não segurar as tabelas de carteiras e ativos enquanto outro worker grava.
+    public const string EnsureMonthlyForeignKeys = """
+        SELECT ensure_positions_foreign_keys(month)
+        FROM (SELECT DISTINCT date_trunc('month', reference_date)::date AS month FROM stage_positions) AS months;
+        """;
+
     public const string IndexStageTables = """
         CREATE INDEX ON stage_positions (fund_cnpj, reference_date);
         ANALYZE stage_positions;
