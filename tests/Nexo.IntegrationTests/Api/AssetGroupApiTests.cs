@@ -67,6 +67,20 @@ public sealed class AssetGroupApiTests(InfrastructureFixture infrastructure) : A
     }
 
     [Fact]
+    public async Task Maturities_ShowHowMuchMoneyEachOneHasInTheLatestMonth()
+    {
+        var page = await GetAsync<PagedResult<AssetGroup>>($"/api/v1/assets/groups?search={Uri.EscapeDataString(Lft)}");
+        var group = await GetAsync<AssetGroupDetail>($"/api/v1/assets/{page.Items[0].AssetId}/maturities");
+        var grouped = await GetAsync<ConcentrationReport>("/api/v1/analytics/concentration?top=100&grouped=true");
+
+        group.ReferenceDate.Should().Be(new DateOnly(2026, 9, 30));
+        group.Holdings.Should().HaveCount(LftMaturities);
+        group.Holdings.Should().AllSatisfy(holding => holding.Funds.Should().BePositive());
+        group.Holdings.Sum(holding => holding.MarketValue)
+            .Should().Be(grouped.Items.Single(item => item.Description == Lft).TotalMarketValue);
+    }
+
+    [Fact]
     public async Task Concentration_CanJoinTheMaturitiesOfTheSameBond()
     {
         var separate = await GetAsync<ConcentrationReport>("/api/v1/analytics/concentration?top=100");
