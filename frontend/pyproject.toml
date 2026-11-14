@@ -1,0 +1,21 @@
+# Configuração das ferramentas do frontend em Python. As dependências ficam em requirements.txt.
+[project]
+name = "nexo-frontend"
+version = "1.0.0"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "developer_console", "financial_analytics"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "BLE"]
+# O tamanho da linha fica a cargo do `ruff format`; textos longos (CSS, mensagens) não são quebrados à força.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nexo_shared", "console", "analytics"]
