@@ -81,8 +81,18 @@ def holders_date(asset_id: int) -> str | None:
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
-def concentration(top=20) -> dict:
-    return _call("concentration", top=top)
+def concentration(top=20, grouped=False) -> dict:
+    return _call("concentration", top=top, grouped=grouped)
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
+def asset_groups(search=None, block=None, page=1, page_size=50) -> dict:
+    return _call("search_asset_groups", search=search, block=block, page=page, page_size=page_size)
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
+def asset_maturities(asset_id: int) -> dict | None:
+    return _call("asset_maturities", asset_id)
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner="Buscando todas as linhas…")

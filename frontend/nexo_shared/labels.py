@@ -71,6 +71,13 @@ def asset(ticker=None, description=None, maturity_date=None) -> str:
     return name
 
 
+def maturities(count: int, first=None, last=None) -> str:
+    """Vencimentos de um grupo: quantos e o intervalo; com um só, a data dele."""
+    if count > 1:
+        return f"{formatting.number(count)} vencimentos, de {formatting.month(first)} a {formatting.month(last)}"
+    return formatting.day(first) if _present(first) else "sem vencimento"
+
+
 def _present(value) -> bool:
     """Vazio, None e NaN (o pandas 3 usa NaN para texto ausente) contam como ausentes."""
     return value is not None and value == value and str(value).strip() != ""

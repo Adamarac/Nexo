@@ -1,4 +1,7 @@
-"""Ativos: busca de ativos e, para cada um, quais fundos têm, quanto e com que peso."""
+"""Ativos: busca de ativos e, para cada um, quais fundos têm, quanto e com que peso.
+Títulos que só mudam o vencimento aparecem numa linha só; ao abrir, aparecem as datas."""
+
+from datetime import date
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,21 +14,36 @@ PAGE_SIZE = 50
 SEARCH_PAGE = "assets-page"
 HOLDERS_PAGE = "holders-page"
 TOP_HOLDERS = 12
+TOP_ASSETS = 100
 ALL = "Todos"
 
 
 def render() -> None:
-    asset_id = _asset_from_link()
+    asset_id = _id_from_link("ativo")
     asset = data.asset(asset_id) if asset_id else None
-    if asset is None:
-        _search(not_found=asset_id is not None)
+    if asset is not None:
+        _detail(asset)
         return
-    _detail(asset)
+    group_id = _id_from_link("grupo")
+    group = data.asset_maturities(group_id) if group_id else None
+    if group is not None:
+        _group(group)
+        return
+    _search(not_found=asset_id is not None or group_id is not None)
 
 
-def _asset_from_link() -> int | None:
-    value = st.query_params.get("ativo", "")
+def _id_from_link(name: str) -> int | None:
+    value = st.query_params.get(name, "")
     return int(value) if value.isdigit() else None
+
+
+def _open(asset_id: int, maturities: int) -> None:
+    """Título com vários vencimentos abre a lista de datas; ativo sozinho abre direto o detalhe."""
+    st.query_params.pop("ativo", None)
+    st.query_params.pop("grupo", None)
+    st.query_params["grupo" if maturities > 1 else "ativo"] = str(asset_id)
+    st.session_state.pop(HOLDERS_PAGE, None)
+    st.rerun()
 
 
 def _search(not_found: bool) -> None:
@@ -46,15 +64,66 @@ def _search(not_found: bool) -> None:
             format_func=lambda value: "Todos os grupos" if value == ALL else labels.block(value),
         )
     if len(search.strip()) < 2 and block == ALL:
-        with ui.card("hint"):
-            ui.empty("Digite ao menos duas letras ou escolha um grupo para começar.")
+        _top_assets()
         return
+    _results(search.strip() or None, None if block == ALL else block)
 
-    result = data.assets(
-        search=search.strip() or None, block=None if block == ALL else block, page=ui.current_page(SEARCH_PAGE), page_size=PAGE_SIZE
-    )
+
+def _top_assets() -> None:
+    """Sem busca, mostra os ativos com mais dinheiro dos fundos no mês mais recente."""
+    report = data.concentration(top=TOP_ASSETS, grouped=True)
+    items = report["items"]
+    note = "busque acima para ver qualquer outro ativo"
+    with ui.card("top-assets", f"Os {TOP_ASSETS} ativos com mais dinheiro dos fundos", note):
+        if not items:
+            ui.empty("Ainda não há carteiras carregadas.")
+            return
+        ui.note(
+            f"Carteiras de {formatting.month(report['referenceDate'])}. "
+            "Os vencimentos de um mesmo título aparecem juntos; selecione uma linha para ver as datas ou quem tem o ativo."
+        )
+        table = pd.DataFrame(
+            [
+                {
+                    "id": item["assetId"],
+                    "maturities": item["maturities"],
+                    "Ativo": item["description"] if item["maturities"] > 1 else labels.asset(item["ticker"], item["description"]),
+                    "Vencimentos no mês": labels.maturities(item["maturities"], item["maturityDate"])
+                    if item["maturities"] == 1
+                    else f"{formatting.number(item['maturities'])} vencimentos",
+                    "Tipo de aplicação": item["applicationType"],
+                    "Fundos que têm": item["funds"],
+                    "Valor (R$)": item["totalMarketValue"],
+                }
+                for item in items
+            ]
+        )
+        event = st.dataframe(
+            ui.tidy(table),
+            hide_index=True,
+            width="stretch",
+            height=min(40 + 35 * len(table), 560),
+            on_select="rerun",
+            selection_mode="single-row",
+            key="top-assets-table",
+            column_order=["Ativo", "Vencimentos no mês", "Tipo de aplicação", "Fundos que têm", "Valor (R$)"],
+            column_config={
+                "Ativo": st.column_config.TextColumn(width="large"),
+                "Fundos que têm": ui.number_column(),
+                "Valor (R$)": ui.money_column(),
+            },
+        )
+    if event.selection.rows:
+        row = table.iloc[event.selection.rows[0]]
+        _open(int(row["id"]), int(row["maturities"]))
+
+
+def _results(search: str | None, block) -> None:
+    result = data.asset_groups(search=search, block=block, page=ui.current_page(SEARCH_PAGE), page_size=PAGE_SIZE)
     with ui.card(
-        "results", f"{formatting.number(result['totalItems'])} ativos encontrados", "selecione uma linha para ver quem tem o ativo"
+        "results",
+        f"{formatting.number(result['totalItems'])} ativos encontrados",
+        "vencimentos do mesmo título aparecem juntos; selecione uma linha para abrir",
     ):
         if not result["items"]:
             ui.empty("Nenhum ativo com essa busca.")
@@ -62,13 +131,14 @@ def _search(not_found: bool) -> None:
         table = pd.DataFrame(
             [
                 {
-                    "id": item["id"],
-                    "Ativo": labels.asset(item["ticker"], item["description"], item["maturityDate"]),
+                    "id": item["assetId"],
+                    "assets": item["assets"],
+                    "Ativo": item["name"] if item["assets"] > 1 else labels.asset(item["ticker"], item["name"]),
+                    "Vencimentos": labels.maturities(item["assets"], item["firstMaturity"], item["lastMaturity"]),
                     "Tipo de aplicação": item["applicationType"],
                     "Tipo de ativo": item["assetType"],
                     "Emissor": item["issuerName"],
                     "ISIN": item["isin"],
-                    "Vencimento": formatting.parse_date(item["maturityDate"]),
                 }
                 for item in result["items"]
             ]
@@ -81,14 +151,55 @@ def _search(not_found: bool) -> None:
             on_select="rerun",
             selection_mode="single-row",
             key="assets-table",
-            column_order=["Ativo", "Tipo de aplicação", "Tipo de ativo", "Emissor", "ISIN", "Vencimento"],
-            column_config={
-                "Ativo": st.column_config.TextColumn(width="large"),
-                "Vencimento": st.column_config.DateColumn(format="DD/MM/YYYY"),
-            },
+            column_order=["Ativo", "Vencimentos", "Tipo de aplicação", "Tipo de ativo", "Emissor", "ISIN"],
+            column_config={"Ativo": st.column_config.TextColumn(width="large")},
         )
         ui.pager(result["totalItems"], PAGE_SIZE, SEARCH_PAGE)
     if event.selection.rows:
+        row = table.iloc[event.selection.rows[0]]
+        _open(int(row["id"]), int(row["assets"]))
+
+
+def _group(group: dict) -> None:
+    assets = pd.DataFrame(group["assets"])
+    first = assets.iloc[0]
+    ui.page_header(group["name"] or "Título sem descrição", first["applicationType"] or "", ["Ativos", "Vencimentos"])
+    if st.button("Voltar para a busca", icon=":material/arrow_back:"):
+        st.query_params.pop("grupo", None)
+        st.rerun()
+
+    ui.kpis(
+        [
+            ui.Kpi("Vencimentos", formatting.number(len(assets)), "já apareceram nas carteiras"),
+            ui.Kpi("Primeiro vencimento", formatting.day(assets["maturityDate"].min()), "o mais antigo"),
+            ui.Kpi("Último vencimento", formatting.day(assets["maturityDate"].max()), "o mais distante"),
+        ]
+    )
+    with ui.card("maturities", "Vencimentos", "selecione uma data para ver quem tem o ativo"):
+        dates = assets["maturityDate"].map(formatting.parse_date)
+        table = pd.DataFrame(
+            {
+                "id": assets["id"],
+                "Vencimento": dates,
+                "Situação": ["Vencido" if day and day < date.today() else "A vencer" for day in dates],
+                "ISIN": assets["isin"].fillna(formatting.MISSING),
+                "Tipo de ativo": assets["assetType"].fillna(formatting.MISSING),
+                "Emissor": assets["issuerName"].fillna(formatting.MISSING),
+            }
+        )
+        event = st.dataframe(
+            ui.tidy(table),
+            hide_index=True,
+            width="stretch",
+            height=min(40 + 35 * len(table), 560),
+            on_select="rerun",
+            selection_mode="single-row",
+            key=f"maturities-{group['assetId']}",
+            column_order=["Vencimento", "Situação", "ISIN", "Tipo de ativo", "Emissor"],
+            column_config={"Vencimento": st.column_config.DateColumn(format="DD/MM/YYYY")},
+        )
+    if event.selection.rows:
+        # Mantém o grupo no link para o "voltar" do detalhe trazer de volta a esta lista.
         st.query_params["ativo"] = str(int(table.iloc[event.selection.rows[0]]["id"]))
         st.session_state.pop(HOLDERS_PAGE, None)
         st.rerun()
@@ -106,9 +217,7 @@ def _detail(asset: dict) -> None:
         if text
     )
     ui.page_header(name, tags, ["Ativos", "Detalhe"])
-    if st.button("Voltar para a busca", icon=":material/arrow_back:"):
-        st.query_params.pop("ativo", None)
-        st.rerun()
+    _detail_navigation(asset)
 
     reference = data.holders_date(asset["id"])
     holders = pd.DataFrame(data.all_holders(asset["id"], reference)) if reference else pd.DataFrame()
@@ -176,6 +285,23 @@ def _detail(asset: dict) -> None:
 
     with ui.card("holders", "Fundos que têm este ativo", "selecione um fundo para abrir a análise dele"):
         _holder_table(asset, holders, reference)
+
+
+def _detail_navigation(asset: dict) -> None:
+    """Voltar leva à lista de vencimentos quando se veio dela; senão, à busca."""
+    from_group = "grupo" in st.query_params
+    group = data.asset_maturities(asset["id"])
+    others = len(group["assets"]) - 1 if group else 0
+    back, more, _ = st.columns([1, 1, 2])
+    if back.button("Voltar para os vencimentos" if from_group else "Voltar para a busca", icon=":material/arrow_back:"):
+        st.query_params.pop("ativo", None)
+        st.rerun()
+    if (
+        not from_group
+        and others > 0
+        and more.button("Ver o outro vencimento" if others == 1 else f"Ver os outros {others} vencimentos", icon=":material/event:")
+    ):
+        _open(asset["id"], others + 1)
 
 
 def _holder_concentration(holders: pd.DataFrame, total: float) -> None:

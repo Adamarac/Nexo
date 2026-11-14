@@ -76,8 +76,15 @@ class NexoApi:
     def asset_holders(self, asset_id: int, *, reference_date=None, page=1, page_size=20) -> dict:
         return self._get(f"/assets/{asset_id}/holders", referenceDate=reference_date, page=page, pageSize=page_size)
 
-    def concentration(self, *, reference_date=None, top=20) -> dict:
-        return self._get("/analytics/concentration", referenceDate=reference_date, top=top)
+    def search_asset_groups(self, *, search=None, block=None, page=1, page_size=20) -> dict:
+        return self._get("/assets/groups", search=search, block=block, page=page, pageSize=page_size)
+
+    def asset_maturities(self, asset_id: int) -> dict | None:
+        return self._get_or_none(f"/assets/{asset_id}/maturities")
+
+    def concentration(self, *, reference_date=None, top=20, grouped=False) -> dict:
+        # Só manda o filtro quando ligado, para a chamada sem agrupar continuar igual.
+        return self._get("/analytics/concentration", referenceDate=reference_date, top=top, grouped=True if grouped else None)
 
     # ---- Emissores ----
 
