@@ -42,7 +42,9 @@ concentrado ele é, quem mais tem um ativo e como dois fundos se comparam.
   mensal, curva de concentração, maiores emissores, dependência dos maiores ativos.
 - **Comparar**: medidas lado a lado, base 100, distribuição das variações, alocação, sobreposição e
   ativos em comum.
-- **Ativos**: detentores, peso do ativo em quem tem, concentração entre detentores.
+- **Ativos**: ao abrir, os 100 ativos com mais dinheiro dos fundos; vencimentos do mesmo título numa linha só,
+  que abre a lista de datas (vencido ou a vencer); no detalhe, detentores, peso do ativo em quem tem e
+  concentração entre detentores.
 - **Emissores**: lista pelo CNPJ com o nome mais usado; no detalhe, cada forma de escrever o nome com quantos
   fundos a usam (lista de barras, sem cortar o texto) e a tabela de fundos com o jeito que cada um escreve.
 

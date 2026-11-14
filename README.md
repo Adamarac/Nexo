@@ -47,6 +47,8 @@ concentrada é a carteira e quais ativos ele divide com outro fundo, e exportar 
   concentração do mercado, situação da ingestão e reprocessamento de arquivo, com OpenAPI e cache no Redis.
 - **Emissores pelo CNPJ.** Cada fundo escreve o nome do emissor de um jeito ("BANCO BMG SA", "BCO BMG SA",
   "BMG"...). A carga guarda, mês a mês, como cada fundo escreveu o nome, e o CNPJ junta todas as formas.
+- **Vencimentos juntos.** Títulos que só mudam a data de vencimento aparecem numa linha só: os do governo pelo
+  nome (as LFTs viram uma linha com todas as datas) e CDBs, debêntures e crédito privado pelo tipo e pelo emissor.
 - **Análise (Streamlit).** Panorama do mercado, busca de fundos, análise de um fundo com medidas resumo e
   concentração, comparação de até quatro fundos (inclusive sobreposição das carteiras) e detentores de
   cada ativo, além dos emissores com as formas de escrever o nome e quais fundos usam cada uma; toda tabela
@@ -68,6 +70,16 @@ concentram mais valor, com busca dos fundos que têm cada ativo.
 distribuição das variações mensais, alocação, sobreposição das carteiras e curvas de concentração.
 
 ![Tela de Análise comparando três fundos](docs/images/analise-comparar.png)
+
+**Análise · Ativos.** Ao abrir, os 100 ativos com mais dinheiro dos fundos no mês. Títulos que só mudam a
+data de vencimento aparecem numa linha só, que abre a lista de datas.
+
+![Tela de Análise com os ativos que têm mais dinheiro dos fundos](docs/images/analise-ativos.png)
+
+**Análise · Emissores.** Cada emissor pelo CNPJ, com as formas como os fundos escrevem o nome dele e quantos
+fundos usam cada uma.
+
+![Tela de Análise mostrando as formas de escrever o nome do Banco BMG](docs/images/analise-emissores.png)
 
 **Console · Ingestão.** Arquivos baixados da CVM, linhas lidas por mês, motivos de rejeição e detalhe de
 cada arquivo, com o botão de reprocessar.

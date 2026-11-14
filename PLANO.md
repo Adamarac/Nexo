@@ -102,7 +102,7 @@ flowchart LR
 | Tabela | Conteúdo |
 |---|---|
 | `funds`, `fund_classes` | Cadastro (fundo provisório quando a carteira chega antes do cadastro) |
-| `assets` | Um registro por ativo, pela chave de identidade de cada bloco |
+| `assets` | Um registro por ativo, pela chave de identidade de cada bloco, com a chave que junta os vencimentos de um mesmo título (`maturity_group`, calculada pelo banco) |
 | `portfolios` | Carteira de um fundo numa data, com revisão e marca de atual |
 | `positions` | Linhas da carteira, **uma partição por mês** (`positions_202609`) |
 | `issuer_spellings` | Como cada fundo escreveu o nome de cada emissor (pelo CNPJ) em cada mês |
@@ -155,7 +155,7 @@ carteira do fundo 0,17 s e 0,01 s; demais consultas entre 0,04 e 0,25 s. O worke
 | Item | Estado |
 |---|---|
 | Ingestão, API, cache, Console e Análise em Streamlit, Docker Compose, CI | Pronto |
-| Testes | 104 de unidade, 59 de integração (Testcontainers), 58 das telas em Python (pytest); todos passam |
+| Testes | 106 de unidade, 67 de integração (Testcontainers), 60 das telas em Python (pytest); todos passam |
 | Carga real | 46 meses e cadastro: 38 milhões de posições, 46 partições, 11 GB |
 | Emissores | 7.527 CNPJs; 2.936 (39%) escritos de mais de um jeito; 1,9 milhão de linhas em `issuer_spellings` (541 MB) |
 
@@ -164,6 +164,15 @@ rejeitados com motivo; o mesmo CNPJ aparece em registros antigos e cancelados, e
 Nas carteiras, o mesmo emissor aparece escrito de vários jeitos conforme o fundo (o CNPJ do BMG tem mais
 de seis formas, como "BANCO BMG S.A", "BCO BMG SA" e "BCOBMGSA"); por isso o emissor é identificado pelo
 CNPJ. Alguns nomes vêm com caracteres de controle, que a exportação para Excel remove.
+O mesmo título público (mesmo ISIN) vem ora como "Títulos Públicos", ora como "Operações Compromissadas",
+conforme o fundo; por isso os vencimentos do governo se juntam só pelo nome do título. Os 53 mil ativos com
+vencimento formam 3,7 mil títulos. A migração que criou essa chave reescreve a tabela de ativos e leva ~35 s,
+então as migrações rodam com limite de 30 minutos em vez dos 30 s padrão.
+
+**Correção em 14/11/2026:** um reprocessamento em massa coincidiu com a CVM republicando nov/2025 a
+jul/2026. A versão antiga que esperava na fila rodou depois da nova e voltou a ser a atual em 7 meses. Agora a
+versão nova marca como substituídas também as antigas que estão na fila, e o reprocessamento de uma versão que
+já tem outra mais nova é recusado (409). Os 7 meses foram reprocessados pela versão nova.
 
 **Notas do ambiente:** com o Smart App Control do Windows ligado, build e testes do .NET rodam em container
 (`scripts/dotnet-container.sh`); as telas em Python também rodam em container, porque a máquina não tem Python.
