@@ -1,0 +1,11 @@
+**/bin
+**/obj
+data
+tests
+.git
+.vs
+.vscode
+*.md
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache

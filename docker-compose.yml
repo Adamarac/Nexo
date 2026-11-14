@@ -1,0 +1,195 @@
+# Sobe o Nexo inteiro: banco, fila, cache, observabilidade, migração, workers, API e as duas telas.
+# Copie .env.example para .env e troque as senhas antes de usar.
+
+x-dotnet-env: &dotnet-env
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=nexo;Username=nexo;Password=${NEXO_DB_PASSWORD:?defina no .env}
+  ConnectionStrings__Redis: redis:6379
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4317
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    # Memória e escrita ajustadas para cargas grandes; os valores padrão do container são para máquinas pequenas.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - max_wal_size=8GB
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - wal_compression=on
+    shm_size: 1gb
+    environment:
+      POSTGRES_DB: nexo
+      POSTGRES_USER: nexo_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?defina no .env}
+      NEXO_DB_USER: nexo
+      NEXO_DB_PASSWORD: ${NEXO_DB_PASSWORD:?defina no .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexo_admin -d nexo"]
+      interval: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: nexo
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?defina no .env}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  # Grafana com Loki, Tempo e Prometheus num container só, recebendo OpenTelemetry na porta 4317.
+  otel:
+    image: grafana/otel-lgtm:0.41.0
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/dotnet.Dockerfile
+      args:
+        PROJECT: Nexo.Worker
+    image: nexo-worker
+    command: ["migrate"]
+    environment:
+      <<: *dotnet-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Só um watcher confere a CVM e baixa os arquivos; várias cópias baixariam tudo repetido.
+  watcher:
+    image: nexo-worker
+    # O nome do container aparece nas métricas, nos logs e no RabbitMQ; assim o console sabe quem é o watcher.
+    hostname: nexo-watcher
+    environment:
+      <<: *dotnet-env
+      RabbitMq__Uri: amqp://nexo:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      Cvm__EarliestMonth: ${CVM_EARLIEST_MONTH:-}
+      Watcher__Enabled: "true"
+      Worker__EnableProcessing: "false"
+    volumes:
+      - nexo-files:/data/files
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Os workers só processam. Cada um pega um arquivo por vez da fila, então meses diferentes rodam em paralelo.
+  worker:
+    image: nexo-worker
+    deploy:
+      replicas: ${WORKER_REPLICAS:-3}
+    environment:
+      <<: *dotnet-env
+      RabbitMq__Uri: amqp://nexo:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      Watcher__Enabled: "false"
+      Worker__EnableProcessing: "true"
+    volumes:
+      - nexo-files:/data/files
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/dotnet.Dockerfile
+      args:
+        PROJECT: Nexo.Api
+    image: nexo-api
+    hostname: nexo-api
+    environment:
+      <<: *dotnet-env
+      Api__AdminApiKey: ${NEXO_ADMIN_API_KEY:?defina no .env}
+    ports:
+      - "127.0.0.1:5080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Console do desenvolvedor: lê a API, o RabbitMQ, o Prometheus, o Loki, o banco (só leitura) e o Redis.
+  console:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/streamlit.Dockerfile
+      args:
+        APP: developer_console
+    image: nexo-console
+    environment:
+      NEXO_API_URL: http://api:8080
+      NEXO_ADMIN_API_KEY: ${NEXO_ADMIN_API_KEY:?defina no .env}
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: nexo
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?defina no .env}
+      PROMETHEUS_URL: http://otel:9090
+      LOKI_URL: http://otel:3100
+      DATABASE_URL: host=postgres port=5432 dbname=nexo user=nexo password=${NEXO_DB_PASSWORD:?defina no .env}
+      REDIS_URL: redis://redis:6379
+      NEXO_FILES_ROOT: /data/files
+    volumes:
+      - nexo-files:/data/files:ro
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Tela de análise para quem estuda as carteiras. Só conversa com a API.
+  analytics:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/streamlit.Dockerfile
+      args:
+        APP: financial_analytics
+    image: nexo-analytics
+    environment:
+      NEXO_API_URL: http://api:8080
+    ports:
+      - "127.0.0.1:8502:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  nexo-files:
